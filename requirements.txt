@@ -1,5 +1,6 @@
-streamlit==1.55.0
+streamlit
 groq
 cadquery
-OCP
-numpy<2.0
+cadquery-ocp
+numpy
+streamlit-stl
