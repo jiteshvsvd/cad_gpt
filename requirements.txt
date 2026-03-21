@@ -1,0 +1,5 @@
+--python-version 3.11
+streamlit==1.55.0
+groq==1.1.1
+cadquery==2.2.0
+numpy<2.0.0

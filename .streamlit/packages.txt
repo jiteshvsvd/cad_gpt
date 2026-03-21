@@ -1,4 +1,6 @@
 libgl1-mesa-glx
+libosmesa6
+libosmesa6-dev
 libglib2.0-0
 libsm6
 libxrender1
@@ -6,10 +8,5 @@ libxext6
 libfontconfig1
 libice6
 libgconf-2-4
-libgtk2.0-0
-libxv1
-libxss1
-libgdk-pixbuf2.0-0
-libdbus-glib-1-2
 mesa-utils
 libvtk9-dev
