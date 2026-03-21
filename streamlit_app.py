@@ -2,6 +2,8 @@ import os
 import uuid
 import traceback
 import streamlit as st
+os.environ["PYOPENGL_PLATFORM"] = "egl"
+os.environ["MESA_GL_VERSION_OVERRIDE"] = "3.3"
 import cadquery as cq
 from groq import Groq
 
