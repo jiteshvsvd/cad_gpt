@@ -1,0 +1,5 @@
+streamlit
+groq
+cadquery
+cadquery-ocp
+numpy<2.0
