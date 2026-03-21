@@ -1,5 +1,4 @@
 streamlit==1.55.0
-groq
-cadquery==2.4.0
-cadquery-ocp==7.7.2
-numpy<2.0
+groq==1.1.1
+cadquery==2.2.0
+numpy<2.0.0
