@@ -2,3 +2,4 @@ streamlit
 groq
 cadquery
 numpy
+streamlit-stl
