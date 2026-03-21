@@ -1,12 +1,10 @@
 libgl1-mesa-glx
 libosmesa6
 libosmesa6-dev
+libglu1-mesa
+mesa-utils
 libglib2.0-0
 libsm6
 libxrender1
 libxext6
 libfontconfig1
-libice6
-libgconf-2-4
-mesa-utils
-libvtk9-dev

@@ -2,9 +2,11 @@ import os
 import uuid
 import traceback
 import streamlit as st
-os.environ["PYOPENGL_PLATFORM"] = "osmesa"  # Use OSMesa
-os.environ["MESA_GL_VERSION_OVERRIDE"] = "3.3"
-os.environ["MESA_GLSL_VERSION_OVERRIDE"] = "330"
+os.environ["PYOPENGL_PLATFORM"] = "osmesa"
+os.environ["MESA_GL_VERSION_OVERRIDE"] = "4.5"
+os.environ["MESA_GLSL_VERSION_OVERRIDE"] = "450"
+os.environ["OCP_VERBOSE"] = "0"
+os.environ["DISPLAY"] = ":99"  # Virtual display
 import cadquery as cq
 from groq import Groq
 
