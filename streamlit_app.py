@@ -7,7 +7,7 @@ os.environ["MESA_GL_VERSION_OVERRIDE"] = "4.5"
 os.environ["MESA_GLSL_VERSION_OVERRIDE"] = "450"
 os.environ["OCP_VERBOSE"] = "0"
 os.environ["DISPLAY"] = ":99"  # Virtual display
-import cadquery as cq
+
 from groq import Groq
 
 # Optional STL viewer component (install: pip install streamlit-stl)
@@ -83,6 +83,7 @@ def run_cad_code_and_export_stl(code: str) -> tuple[str, str]:
     """
     Returns (stl_path, error_message)
     """
+    import cadquery as cq
     try:
         namespace = {"cq": cq}
         exec(code, namespace)
