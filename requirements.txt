@@ -1,4 +1,5 @@
 streamlit==1.55.0
 groq==1.1.1
-cadquery==2.4.0
+requests
+streamlit-stl
 numpy<2.0.0

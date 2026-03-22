@@ -1,33 +1,33 @@
 import os
 import uuid
+import base64
 import traceback
+import requests
 import streamlit as st
-os.environ["PYOPENGL_PLATFORM"] = "osmesa"
-os.environ["MESA_GL_VERSION_OVERRIDE"] = "4.5"
-os.environ["MESA_GLSL_VERSION_OVERRIDE"] = "450"
-os.environ["OCP_VERBOSE"] = "0"
-os.environ["DISPLAY"] = ":99"  # Virtual display
-
 from groq import Groq
 
-# Optional STL viewer component (install: pip install streamlit-stl)
-# If not installed, app still works with download only.
+st.set_page_config(page_title="Groq CAD Chat", page_icon="🧩", layout="wide")
+st.title("🧩 Groq CAD Chat (CadQuery + Streamlit)")
+
+# Optional STL viewer
 try:
     from streamlit_stl import stl_from_file
     HAS_STL_VIEWER = True
 except Exception:
     HAS_STL_VIEWER = False
 
-st.set_page_config(page_title="Groq CAD Chat", page_icon="🧩", layout="wide")
-st.title("🧩 Groq CAD Chat (CadQuery + Streamlit)")
-
 # ---------------------------
 # Config
 # ---------------------------
 api_key = st.secrets.get("GROQ_API_KEY", os.getenv("GROQ_API_KEY", ""))
+CAD_BACKEND_URL = st.secrets.get("CAD_BACKEND_URL", os.getenv("CAD_BACKEND_URL", ""))
+
 if not api_key:
-    st.error("GROQ_API_KEY not found. Set it in Streamlit secrets or environment variable.")
+    st.error("GROQ_API_KEY not found.")
     st.stop()
+
+if not CAD_BACKEND_URL:
+    st.warning("CAD_BACKEND_URL not set. CAD model building disabled.")
 
 client = Groq(api_key=api_key)
 
@@ -52,7 +52,10 @@ with st.sidebar:
     st.header("Settings")
     model_name = st.selectbox("Model", MODEL_OPTIONS, index=0)
     temperature = st.slider("Temperature", 0.0, 1.0, 0.2, 0.1)
-    st.caption("Install optional STL viewer: pip install streamlit-stl")
+    if CAD_BACKEND_URL:
+        st.success(f"CAD backend connected")
+    else:
+        st.error("CAD backend not configured")
     if st.button("Clear chat"):
         st.session_state.messages = []
         st.rerun()
@@ -61,7 +64,7 @@ with st.sidebar:
 # Session state
 # ---------------------------
 if "messages" not in st.session_state:
-    st.session_state.messages = []  # list of dicts: role/content/type/meta
+    st.session_state.messages = []
 
 def clean_code(text: str) -> str:
     lines = text.splitlines()
@@ -79,22 +82,28 @@ def generate_cad_code(user_request: str) -> str:
     )
     return resp.choices[0].message.content or ""
 
-def run_cad_code_and_export_stl(code: str) -> tuple[str, str]:
+def run_cad_via_backend(code: str) -> tuple[str, str]:
     """
+    Calls Render backend to execute CadQuery code and return STL.
     Returns (stl_path, error_message)
     """
-    import cadquery as cq
+    if not CAD_BACKEND_URL:
+        return "", "CAD_BACKEND_URL is not configured."
     try:
-        namespace = {"cq": cq}
-        exec(code, namespace)
-        result = namespace.get("result", None)
-        if result is None:
-            return "", "No variable named `result` found in generated code."
+        r = requests.post(
+            f"{CAD_BACKEND_URL}/generate_stl",
+            json={"code": code},
+            timeout=120
+        )
+        data = r.json()
+        if not data.get("ok"):
+            return "", data.get("error", "Unknown backend error")
 
-        file_name = f"cad_{uuid.uuid4().hex[:8]}.stl"
-        # CadQuery export
-        cq.exporters.export(result, file_name)
-        return file_name, ""
+        stl_bytes = base64.b64decode(data["stl_base64"])
+        filename = f"cad_{uuid.uuid4().hex[:8]}.stl"
+        with open(filename, "wb") as f:
+            f.write(stl_bytes)
+        return filename, ""
     except Exception:
         return "", traceback.format_exc()
 
@@ -109,53 +118,55 @@ for m in st.session_state.messages:
             st.code(m["content"], language="python")
         elif m.get("type") == "cad":
             st.markdown("✅ CAD model generated.")
-            st.caption(f"STL file: {m['content']}")
             if HAS_STL_VIEWER:
-                stl_from_file(
-                    file_path=m["content"],
-                    color="#87CEEB",
-                    material="material",
-                    auto_rotate=False,
-                    opacity=1.0,
-                    height=500,
-                    shininess=50,
-                    key=f"viewer_{m['content']}"
-                )
-            with open(m["content"], "rb") as f:
-                st.download_button(
-                    "Download STL",
-                    data=f,
-                    file_name=m["content"],
-                    mime="model/stl",
-                    key=f"dl_{m['content']}"
-                )
+                try:
+                    stl_from_file(
+                        file_path=m["content"],
+                        color="#87CEEB",
+                        material="material",
+                        auto_rotate=False,
+                        opacity=1.0,
+                        height=500,
+                        shininess=50,
+                        key=f"viewer_{m['content']}"
+                    )
+                except Exception as e:
+                    st.warning(f"Viewer error: {e}")
+            try:
+                with open(m["content"], "rb") as f:
+                    st.download_button(
+                        "Download STL",
+                        data=f,
+                        file_name=m["content"],
+                        mime="model/stl",
+                        key=f"dl_{m['content']}"
+                    )
+            except FileNotFoundError:
+                st.warning("STL file not available in this session.")
         elif m.get("type") == "error":
             st.error(m["content"])
 
 # ---------------------------
 # Chat input
 # ---------------------------
-user_msg = st.chat_input("Describe CAD model (example: cylinder radius 5mm, height 10mm, hole radius 2mm)")
+user_msg = st.chat_input("Describe CAD model (e.g. cylinder radius 5mm, height 10mm)")
 
 if user_msg:
-    # store + show user message
     st.session_state.messages.append({"role": "user", "type": "text", "content": user_msg})
     with st.chat_message("user"):
         st.markdown(user_msg)
 
-    # assistant processing
     with st.chat_message("assistant"):
         with st.spinner("Generating CadQuery code..."):
             raw = generate_cad_code(user_msg)
             code = clean_code(raw)
 
-        st.markdown("Here is the generated CadQuery code:")
+        st.markdown("Generated CadQuery code:")
         st.code(code, language="python")
-
         st.session_state.messages.append({"role": "assistant", "type": "code", "content": code})
 
-        with st.spinner("Building CAD model..."):
-            stl_path, err = run_cad_code_and_export_stl(code)
+        with st.spinner("Building CAD model via backend..."):
+            stl_path, err = run_cad_via_backend(code)
 
         if err:
             st.error("CAD build failed.")
@@ -164,16 +175,19 @@ if user_msg:
         else:
             st.success("CAD model created successfully.")
             if HAS_STL_VIEWER:
-                stl_from_file(
-                    file_path=stl_path,
-                    color="#87CEEB",
-                    material="material",
-                    auto_rotate=False,
-                    opacity=1.0,
-                    height=500,
-                    shininess=50,
-                    key=f"viewer_new_{stl_path}"
-                )
+                try:
+                    stl_from_file(
+                        file_path=stl_path,
+                        color="#87CEEB",
+                        material="material",
+                        auto_rotate=False,
+                        opacity=1.0,
+                        height=500,
+                        shininess=50,
+                        key=f"viewer_new_{stl_path}"
+                    )
+                except Exception as e:
+                    st.warning(f"Viewer error: {e}")
 
             with open(stl_path, "rb") as f:
                 st.download_button(
@@ -183,5 +197,4 @@ if user_msg:
                     mime="model/stl",
                     key=f"dl_new_{stl_path}"
                 )
-
             st.session_state.messages.append({"role": "assistant", "type": "cad", "content": stl_path})
