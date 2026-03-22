@@ -4,3 +4,4 @@ cadquery==2.4.0
 pydantic
 numpy<2.0
 groq
+streamlit-stl
