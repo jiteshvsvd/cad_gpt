@@ -7,8 +7,11 @@ os.environ["MESA_GL_VERSION_OVERRIDE"] = "4.5"
 os.environ["MESA_GLSL_VERSION_OVERRIDE"] = "450"
 os.environ["OCP_VERBOSE"] = "0"
 os.environ["DISPLAY"] = ":99"  # Virtual display
+import requests
+import base64
 
 from groq import Groq
+CAD_BACKEND_URL = st.secrets.get("CAD_BACKEND_URL", "")
 
 # Optional STL viewer component (install: pip install streamlit-stl)
 # If not installed, app still works with download only.
@@ -79,24 +82,64 @@ def generate_cad_code(user_request: str) -> str:
     )
     return resp.choices[0].message.content or ""
 
-def run_cad_code_and_export_stl(code: str) -> tuple[str, str]:
-    """
-    Returns (stl_path, error_message)
-    """
-    import cadquery as cq
-    try:
-        namespace = {"cq": cq}
-        exec(code, namespace)
-        result = namespace.get("result", None)
-        if result is None:
-            return "", "No variable named `result` found in generated code."
+# def run_cad_code_and_export_stl(code: str) -> tuple[str, str]:
+#     """
+#     Returns (stl_path, error_message)
+#     """
+#     import cadquery as cq
+#     try:
+#         namespace = {"cq": cq}
+#         exec(code, namespace)
+#         result = namespace.get("result", None)
+#         if result is None:
+#             return "", "No variable named `result` found in generated code."
 
-        file_name = f"cad_{uuid.uuid4().hex[:8]}.stl"
-        # CadQuery export
-        cq.exporters.export(result, file_name)
-        return file_name, ""
-    except Exception:
-        return "", traceback.format_exc()
+#         file_name = f"cad_{uuid.uuid4().hex[:8]}.stl"
+#         # CadQuery export
+#         cq.exporters.export(result, file_name)
+#         return file_name, ""
+#     except Exception:
+#         return "", traceback.format_exc()
+
+
+
+def run_cad_via_backend(code: str) -> tuple[str, str]:
+    """
+    Sends code to Render backend and gets back an STL file.
+    Returns: (stl_path, error_message)
+    """
+    if not CAD_BACKEND_URL:
+        return "", "CAD_BACKEND_URL is not configured in Streamlit Secrets."
+
+    try:
+        # 1. Send the request to Render
+        response = requests.post(
+            f"{CAD_BACKEND_URL}/generate_stl",
+            json={"code": code},
+            timeout=120
+        )
+        
+        # 2. Check if the request was successful
+        if response.status_code != 200:
+            return "", f"Backend Error (Status {response.status_code}): {response.text}"
+            
+        data = response.json()
+        
+        if not data.get("ok"):
+            return "", data.get("error", "Unknown error from backend.")
+
+        # 3. Decode the STL file sent by the backend
+        stl_bytes = base64.b64decode(data["stl_base64"])
+        filename = f"cad_{uuid.uuid4().hex[:8]}.stl"
+        
+        # 4. Save it locally on Streamlit Cloud so the user can download/view it
+        with open(filename, "wb") as f:
+            f.write(stl_bytes)
+            
+        return filename, ""
+        
+    except Exception as e:
+        return "", f"Failed to connect to backend: {str(e)}"
 
 # ---------------------------
 # Render existing chat
@@ -155,7 +198,7 @@ if user_msg:
         st.session_state.messages.append({"role": "assistant", "type": "code", "content": code})
 
         with st.spinner("Building CAD model..."):
-            stl_path, err = run_cad_code_and_export_stl(code)
+            stl_path, err = run_cad_via_backend(code)
 
         if err:
             st.error("CAD build failed.")
